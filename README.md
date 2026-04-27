@@ -2,7 +2,7 @@
 
 ## 项目任务
 
-我们在STATE模型的基础上进行了创新，以增强其OOD任务的能力。
+我们在STATE模型( https://github.com/ArcInstitute/state )的基础上进行了创新，以增强其OOD任务的能力。
 
 ## 仓库介绍
 
@@ -17,6 +17,7 @@
 ## 模型
 
 （tahoe/nips）
+
 - baseControl
 - baseMLP
 - biolord
@@ -24,6 +25,7 @@
 - scVI
 
 （tahoe-small）
+
 - context_mean
 - perturb_mean
 - pca_ridge
