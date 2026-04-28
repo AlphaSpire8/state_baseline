@@ -45,6 +45,7 @@ OUTPUT_DIR = Path(
     "complex_models/scGen/outputs_small_scperturbench"
 )
 TEMP_PRED_DIR = OUTPUT_DIR / "tmp_predictions"
+EVAL_REF_DIR = OUTPUT_DIR / "eval_reference"
 DRUG_NAME_CSV = Path("/data1/fanpeishan/STATE/for_state/about_baseline/docs/drug_name_list.csv")
 
 CONTROL_DRUG = "DMSO_TF"
@@ -349,6 +350,37 @@ def validate_prediction_block(adata_pred, stim_skeleton, test_cell_type, drug_na
         raise RuntimeError(f"{test_cell_type}/{drug_name} 预测矩阵包含负值")
 
 
+def build_real_reference_for_eval(test_cell_type, selected_drugs, control_drug_index):
+    """
+    为 cell-eval 生成与小规模 prediction 药物集合完全一致的 real h5ad。
+
+    cell-eval 要求 adata_pred 和 adata_real 的 pert_col 取值集合一致；
+    小规模脚本只预测少量 drug，因此不能直接拿全量 tahoe_filtered/{cell}.h5ad 评估。
+    """
+    real_blocks = [read_one_block(test_cell_type, control_drug_index)]
+
+    for drug_index, _ in selected_drugs:
+        real_blocks.append(read_one_block(test_cell_type, drug_index))
+
+    real_ref = ad.concat(
+        real_blocks,
+        join="inner",
+        merge="same",
+        index_unique=None,
+    )
+    real_ref.obs_names_make_unique()
+
+    EVAL_REF_DIR.mkdir(parents=True, exist_ok=True)
+    real_ref_path = EVAL_REF_DIR / f"{test_cell_type}_real_subset.h5ad"
+    real_ref.write_h5ad(real_ref_path)
+
+    print(f"已生成匹配 cell-eval 的真实子集: {real_ref_path}")
+    print(f"真实子集 shape: {real_ref.shape}")
+
+    del real_blocks, real_ref
+    cleanup_memory()
+
+
 # =========================
 # 主流程
 # =========================
@@ -358,6 +390,7 @@ if __name__ == "__main__":
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     TEMP_PRED_DIR.mkdir(parents=True, exist_ok=True)
+    EVAL_REF_DIR.mkdir(parents=True, exist_ok=True)
 
     drug_name_list = read_drug_name_list()
     drug_to_index = {drug_name: idx for idx, drug_name in enumerate(drug_name_list)}
@@ -476,6 +509,12 @@ if __name__ == "__main__":
 
         del output_blocks, ctrl_real, final_adata
         cleanup_memory()
+
+        build_real_reference_for_eval(
+            test_cell_type=test_cell_type,
+            selected_drugs=selected_drugs,
+            control_drug_index=control_drug_index,
+        )
 
     print("\n" + "=" * 100)
     print("Tahoe scGen 小规模复现流程完成")
