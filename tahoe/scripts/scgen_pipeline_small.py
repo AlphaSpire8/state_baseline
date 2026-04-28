@@ -124,19 +124,23 @@ def clear_scvi_managers(model, adata_train=None):
     if model is None:
         return
 
-    for args in [(), (adata_train,)]:
-        if args == (None,):
-            continue
-        try:
-            model.deregister_manager(*args)
-        except Exception:
-            pass
+    try:
+        model.deregister_manager()
+    except Exception:
+        pass
 
-    if adata_train is not None:
-        try:
-            type(model).deregister_manager(adata_train)
-        except Exception:
-            pass
+    if adata_train is None:
+        return
+
+    try:
+        model.deregister_manager(adata_train)
+    except Exception:
+        pass
+
+    try:
+        type(model).deregister_manager(adata_train)
+    except Exception:
+        pass
 
 
 # =========================
