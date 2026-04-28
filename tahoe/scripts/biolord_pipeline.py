@@ -12,7 +12,7 @@ Tahoe biolord baseline aligned with scPerturBench OOD biolord.
 2. 每个 target cell_type 单独训练一个 biolord 模型。
 3. 当前 target cell_type 的非 control 细胞标记为 OOD。
 4. 其它所有细胞，包括当前 target cell_type 的 control，按 9:1 随机划分 train/valid。
-5. 用当前 target cell_type 的 control 作为 source，调用 compute_prediction_adata() 一次生成所有 drug 预测。
+5. 用当前 target cell_type 的 control 作为 source，逐 drug 调用 compute_prediction_adata() 生成预测。
 6. 最终只需要 outputs/{cell_type}_predicted.h5ad；tmp_predictions 只是断点续跑和低内存 merge 的中间文件。
 """
 
@@ -274,6 +274,23 @@ def clear_biolord_managers(model, adata_task=None):
             pass
 
 
+def clear_biolord_temp_manager(model, adata_temp=None):
+    """best-effort 清理预测阶段临时 AnnDataManager，不清理主训练 manager。"""
+    if adata_temp is None:
+        return
+
+    if model is not None:
+        try:
+            model.deregister_manager(adata_temp)
+        except Exception:
+            pass
+
+    try:
+        biolord.Biolord.deregister_manager(adata_temp)
+    except Exception:
+        pass
+
+
 def selected_target_items():
     """根据 START/END 配置返回本轮要处理的 target cell_type。"""
     if START_TARGET_INDEX < 0:
@@ -475,7 +492,8 @@ def train_and_predict_one_target(target_rank, target_cell_type, drug_name_list, 
     model = None
     adata_task = None
     adata_source = None
-    adata_preds = None
+    adata_prediction_context = None
+    adata_preds_drug = None
 
     try:
         adata_task = build_target_cell_adata(
@@ -529,16 +547,7 @@ def train_and_predict_one_target(target_rank, target_cell_type, drug_name_list, 
 
         adata_source = adata_task[source_indices].copy()
         print(f"source control cells: {adata_source.n_obs}")
-        print("开始调用 model.compute_prediction_adata() ...")
-        adata_preds = model.compute_prediction_adata(
-            adata_task,
-            adata_source,
-            target_attributes=["condition2"],
-        )
-        adata_preds.obs_names_make_unique()
-        log_rss(f"{target_cell_type}:after_compute_prediction")
-
-        pred_drug_values = adata_preds.obs["condition2"].astype(str).to_numpy()
+        condition2_values = adata_task.obs["condition2"].astype(str).to_numpy()
 
         for drug_index, drug_name in tqdm(
             list(enumerate(drug_name_list)),
@@ -556,7 +565,26 @@ def train_and_predict_one_target(target_rank, target_cell_type, drug_name_list, 
                 drug_index=drug_index,
                 expected_drug_name=drug_name,
             )
-            pred_for_drug = adata_preds[pred_drug_values == drug_name].copy()
+
+            # compute_prediction_adata() materializes a dense prediction matrix.
+            # Calling it once for all 380 Tahoe drugs can request tens of GB of
+            # CUDA memory, so keep the target-attribute context to only control
+            # plus the current drug and release it immediately after saving.
+            prediction_context_mask = np.isin(condition2_values, [CONTROL_DRUG, drug_name])
+            prediction_context_indices = np.flatnonzero(prediction_context_mask)
+            if len(prediction_context_indices) == 0:
+                raise RuntimeError(f"{target_cell_type}/drug={drug_name} 没有 prediction context")
+
+            adata_prediction_context = adata_task[prediction_context_indices].copy()
+            adata_preds_drug = model.compute_prediction_adata(
+                adata_prediction_context,
+                adata_source,
+                target_attributes=["condition2"],
+            )
+            adata_preds_drug.obs_names_make_unique()
+            pred_drug_values = adata_preds_drug.obs["condition2"].astype(str).to_numpy()
+
+            pred_for_drug = adata_preds_drug[pred_drug_values == drug_name].copy()
             if pred_for_drug.n_obs == 0:
                 raise RuntimeError(
                     f"biolord 没有生成 target={target_cell_type}, "
@@ -578,18 +606,28 @@ def train_and_predict_one_target(target_rank, target_cell_type, drug_name_list, 
             )
             adata_pred.write_h5ad(save_path)
 
-            del stim_skeleton, pred_for_drug, pred_x, adata_pred
+            clear_biolord_temp_manager(model, adata_prediction_context)
+            del (
+                stim_skeleton,
+                adata_prediction_context,
+                adata_preds_drug,
+                pred_for_drug,
+                pred_x,
+                adata_pred,
+            )
+            adata_prediction_context = None
+            adata_preds_drug = None
             cleanup_memory()
+            log_rss(f"{target_cell_type}:drug_{drug_index}:after_save")
 
-        del adata_source, adata_preds
+        del adata_source
         adata_source = None
-        adata_preds = None
         cleanup_memory()
         log_rss(f"{target_cell_type}:after_save_all_predictions")
 
     finally:
         clear_biolord_managers(model, adata_task)
-        del model, adata_task, adata_source, adata_preds
+        del model, adata_task, adata_source, adata_prediction_context, adata_preds_drug
         cleanup_memory()
         log_rss(f"{target_cell_type}:after_cleanup")
 
