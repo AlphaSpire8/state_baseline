@@ -7,13 +7,13 @@ Tahoe biolord baseline（按 scPerturBench OOD 口径重写）。
    RUN_FINAL_MERGE = True 或 False
    START_TARGET_INDEX / END_TARGET_INDEX 指向要运行的目标 cell_type 范围
 2. 执行：
-   CUDA_VISIBLE_DEVICES=0 python /datasets/fanpeishan/state_baseline/tahoe/scripts/biolord_pipeline.py
+   CUDA_VISIBLE_DEVICES=7 python /data1/fanpeishan/STATE/for_state/about_baseline/context_generalization/data_tahoe/biolord/biolord_pipeline.py
 
 续跑命令：
 1. 保持 SKIP_EXISTING_PRED_FILES = True
 2. 修改 START_TARGET_INDEX / END_TARGET_INDEX，只覆盖还没跑完的目标 cell_type
 3. 执行同一个命令：
-   CUDA_VISIBLE_DEVICES=0 python /datasets/fanpeishan/state_baseline/tahoe/scripts/biolord_pipeline.py
+   CUDA_VISIBLE_DEVICES=7 python /data1/fanpeishan/STATE/for_state/about_baseline/context_generalization/data_tahoe/biolord/biolord_pipeline.py
 
 执行最终 merge 的命令：
 1. 设置：
@@ -22,7 +22,7 @@ Tahoe biolord baseline（按 scPerturBench OOD 口径重写）。
    START_TARGET_INDEX = 0
    END_TARGET_INDEX = len(TARGET_CELL_TYPES) - 1
 2. 执行同一个命令：
-   CUDA_VISIBLE_DEVICES=0 python /datasets/fanpeishan/state_baseline/tahoe/scripts/biolord_pipeline.py
+   CUDA_VISIBLE_DEVICES=7 python /data1/fanpeishan/STATE/for_state/about_baseline/context_generalization/data_tahoe/biolord/biolord_pipeline.py
 
 核心协议：
 1. 每个目标 cell_type 单独训练一个 biolord 模型；
@@ -60,7 +60,7 @@ except ImportError:
 # =========================
 # TARGET_CELL_TYPES 的下标范围。建议一次只跑一个 target，降低单进程内存峰值。
 START_TARGET_INDEX = 0
-END_TARGET_INDEX = 0
+END_TARGET_INDEX = 6
 
 # 是否执行训练和临时预测生成。
 RUN_TRAINING = True
@@ -85,10 +85,10 @@ TRY_MALLOC_TRIM = True
 # 基础路径配置
 # =========================
 # 路径保持当前脚本中的设置；如服务器路径不同，请手动修改这里。
-SPLIT_BY_DRUG_DIR = Path("/datasets/fanpeishan/data/tahoe_split_by_drug")
-DRUG_NAME_CSV = Path("/datasets/fanpeishan/data/docs/drug_name_list.csv")
+SPLIT_BY_DRUG_DIR = Path("/data1/fanpeishan/STATE/for_state/data/split_by_drug")
+DRUG_NAME_CSV = Path("/data1/fanpeishan/STATE/for_state/about_baseline/docs/drug_name_list.csv")
 
-OUTPUT_DIR = Path("/datasets/fanpeishan/data/tahoe_for_biolord")
+OUTPUT_DIR = Path("/data1/fanpeishan/STATE/for_state/about_baseline/context_generalization/data_tahoe/biolord/outputs")
 TEMP_PRED_DIR = OUTPUT_DIR / "tmp_predictions"
 TRAIN_LOG_DIR = OUTPUT_DIR / "biolord_train_logs"
 
