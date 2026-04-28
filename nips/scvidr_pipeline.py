@@ -50,7 +50,7 @@ from vidr.utils import prepare_data  # noqa: E402
 
 logging.getLogger("scvi").setLevel(logging.WARNING)
 warnings.filterwarnings("ignore")
-torch.set_float32_matmul_precision("medium")
+# torch.set_float32_matmul_precision("medium")
 
 
 # =========================
@@ -84,8 +84,6 @@ CONTROL_DRUG = "DMSO_TF"
 MAX_EPOCHS = 100
 BATCH_SIZE = 128
 EARLY_STOPPING_PATIENCE = 25
-LINEAR_DECODER = False
-REGRESSION = False
 RANDOM_SEED = 16
 
 
@@ -239,7 +237,7 @@ def train_and_predict_one_block(sample_name, cell_name, drug_name, pair_adata, s
         normalized=True,
     )
 
-    model = VIDR(train_adata, linear_decoder=LINEAR_DECODER)
+    model = VIDR(train_adata, linear_decoder=False)
     model.train(
         max_epochs=MAX_EPOCHS,
         batch_size=BATCH_SIZE,
@@ -254,7 +252,7 @@ def train_and_predict_one_block(sample_name, cell_name, drug_name, pair_adata, s
         ctrl_key=CONTROL_DRUG,
         treat_key=drug_name,
         cell_type_to_predict=cell_name,
-        regression=REGRESSION,
+        regression=False,
     )
 
     pred_x = adata_to_numpy(pred_adata.X)

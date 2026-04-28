@@ -3,7 +3,7 @@ NIPS scGen baseline aligned with scPerturBench OOD scGen.
 
 Run example:
 cd /data1/fanpeishan/STATE/for_state/about_baseline/context_generalization/data_nips/scGen
-CUDA_VISIBLE_DEVICES=7 python scripts/scgen_pipeline.py
+CUDA_VISIBLE_DEVICES=6 python scripts/scgen_pipeline.py
 
 The important protocol detail is:
 - target-cell controls are allowed in training;
@@ -61,9 +61,9 @@ CONTROL_DRUG = "DMSO_TF"
 # scPerturBench-like training parameters
 # =========================
 # 数据集较小，因此这里使用相对简洁、稳妥的参数。
-MAX_EPOCHS = 64
-BATCH_SIZE = 8192
-EARLY_STOPPING_PATIENCE = 8
+MAX_EPOCHS = 200
+BATCH_SIZE = 64
+EARLY_STOPPING_PATIENCE = 25
 RANDOM_SEED = 16
 
 

@@ -1,3 +1,4 @@
+# CUDA_VISIBLE_DEVICES=5 python /data1/fanpeishan/STATE/for_state/about_baseline/context_generalization/data_nips/biolord/scripts/biolord_pipeline.py
 from pathlib import Path
 import gc
 import logging
@@ -44,8 +45,8 @@ CONTROL_DRUG = "DMSO_TF"
 RANDOM_SEED = 16
 
 # 训练与预测 batch size：按用户要求固定
-TRAIN_BATCH_SIZE = 4096
-PRED_BATCH_SIZE = 16384
+TRAIN_BATCH_SIZE = 128
+PRED_BATCH_SIZE = 4096
 
 # 模型结构参数：主体参考 biolord 官方/参考实现的常用配置
 N_LATENT = 256
@@ -79,9 +80,9 @@ TRAIN_PLAN_KWARGS = {
     "scheduler_final_lr": 1e-5,
 }
 
-MAX_EPOCHS = 32
+MAX_EPOCHS = 500
 EARLY_STOPPING_PATIENCE = 8
-CHECK_VAL_EVERY_N_EPOCH = 2
+CHECK_VAL_EVERY_N_EPOCH = 5
 TRAIN_NUM_WORKERS = 0
 
 
@@ -264,7 +265,7 @@ def train_biolord_model(adata_task: ad.AnnData, task_name: str) -> biolord.Biolo
     print("开始初始化 biolord 模型 ...")
     model = biolord.Biolord(
         adata=adata_task,
-        n_latent=N_LATENT,
+        n_latent=256,
         model_name=f"biolord_{task_name}",
         module_params=MODULE_PARAMS,
         train_classifiers=False,
@@ -284,7 +285,7 @@ def train_biolord_model(adata_task: ad.AnnData, task_name: str) -> biolord.Biolo
         check_val_every_n_epoch=CHECK_VAL_EVERY_N_EPOCH,
         enable_checkpointing=False,
         default_root_dir=str(TRAIN_LOG_DIR / task_name),
-        num_workers=TRAIN_NUM_WORKERS,
+        # num_workers=TRAIN_NUM_WORKERS,
     )
 
     print("模型训练完成")
