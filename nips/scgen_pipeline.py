@@ -107,6 +107,37 @@ def to_template_matrix(matrix, template_x):
     return matrix
 
 
+def has_batchnorm_singleton_tail(n_obs, batch_size):
+    """
+    scGen/scvi 默认会切 train/validation。
+    如果任一 loader 的最后一个 batch 只剩 1 个细胞，BatchNorm 会报错。
+    """
+    if n_obs <= 1:
+        return True
+
+    candidate_sizes = {
+        n_obs,
+        int(np.floor(n_obs * 0.9)),
+        int(np.ceil(n_obs * 0.9)),
+        n_obs - int(np.floor(n_obs * 0.9)),
+        n_obs - int(np.ceil(n_obs * 0.9)),
+    }
+    candidate_sizes = {n for n in candidate_sizes if n > 0}
+    return any(n % batch_size == 1 for n in candidate_sizes)
+
+
+def choose_scgen_batch_size(n_obs):
+    """
+    优先使用参考实现的 batch_size=64。
+    只有当尾 batch 会变成 1 时，才退到附近的 batch size，避免 BatchNorm 崩溃。
+    """
+    max_batch_size = min(BATCH_SIZE, n_obs)
+    for batch_size in range(max_batch_size, 1, -1):
+        if not has_batchnorm_singleton_tail(n_obs, batch_size):
+            return batch_size
+    raise ValueError(f"训练数据细胞数过少，无法为 scGen 选择安全 batch size: n_obs={n_obs}")
+
+
 def prepare_obs_columns(adata):
     adata.obs_names_make_unique()
     adata.var_names_make_unique()
@@ -181,10 +212,14 @@ def train_one_scgen_model(adata_train):
         labels_key="cell_name",
     )
 
+    batch_size = choose_scgen_batch_size(adata_train.n_obs)
+    if batch_size != BATCH_SIZE:
+        print(f"  adjusted batch size: {BATCH_SIZE} -> {batch_size} to avoid BatchNorm singleton batch")
+
     model = scgen.SCGEN(adata_train)
     model.train(
         max_epochs=MAX_EPOCHS,
-        batch_size=BATCH_SIZE,
+        batch_size=batch_size,
         early_stopping=True,
         early_stopping_patience=EARLY_STOPPING_PATIENCE,
     )
