@@ -301,6 +301,8 @@ if __name__ == "__main__":
             # ------------------------------------------------------------
             # 4. 使用参考实现的 compute_prediction_adata 生成预测。
             # 每个目标 cell_name 使用自身真实 control 作为 source。
+            # 当前 biolord 版本的 target_attributes 只能传 categorical attribute；
+            # dose 是 ordered attribute，所以不放进 target_attributes，而是保留 source control 的 dose。
             # ------------------------------------------------------------
             output_blocks = []
 
@@ -336,7 +338,7 @@ if __name__ == "__main__":
                 adata_preds = model.compute_prediction_adata(
                     adata_task,
                     adata_source,
-                    target_attributes=["condition2", "dose"],
+                    target_attributes=["condition2"],
                 )
 
                 target_pairs = (
