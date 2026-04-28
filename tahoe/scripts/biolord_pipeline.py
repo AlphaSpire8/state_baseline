@@ -13,7 +13,9 @@ Tahoe biolord baseline aligned with scPerturBench OOD biolord.
 3. 当前 target cell_type 的非 control 细胞标记为 OOD。
 4. 其它所有细胞，包括当前 target cell_type 的 control，按 9:1 随机划分 train/valid。
 5. 用当前 target cell_type 的 control 作为 source，逐 drug 做低内存属性替换预测。
-6. 最终只需要 outputs/{cell_type}_predicted.h5ad；tmp_predictions 只是断点续跑和低内存 merge 的中间文件。
+6. biolord 为每个 observation 学习一个 latent 参数，Tahoe 全量细胞无法直接进模型；
+   因此训练任务按 cell_type × drug block 做固定随机下采样。
+7. 最终只需要 outputs/{cell_type}_predicted.h5ad；tmp_predictions 只是断点续跑和低内存 merge 的中间文件。
 """
 
 from pathlib import Path
@@ -84,6 +86,12 @@ PREDICT_CELL_BATCH_SIZE = 4096
 MAX_EPOCHS = 500
 EARLY_STOPPING_PATIENCE = 20
 CHECK_VAL_EVERY_N_EPOCH = 5
+
+# biolord 的 latent 参数规模约为 n_obs × N_LATENT。
+# Tahoe 当前 target 任务全量约 6800 万细胞，会在 model.to(cuda) 时单 latent 参数就申请约 65GB。
+# 这里保留所有 cell_type/drug 的覆盖，但限制每个 block 进入训练任务的细胞数。
+MAX_CELLS_PER_BLOCK = 64
+MAX_TARGET_CONTROL_CELLS = 4096
 
 MODULE_PARAMS = {
     "decoder_width": 1024,
@@ -239,6 +247,22 @@ def read_one_block(cell_type, drug_index, expected_drug_name=None):
     return adata
 
 
+def stable_block_seed(cell_type, drug_index):
+    """为每个 cell_type/drug block 生成稳定随机种子。"""
+    cell_id = int(str(cell_type).lstrip("c"))
+    return SPLIT_RANDOM_SEED + cell_id * 1000 + int(drug_index)
+
+
+def downsample_block(adata, max_cells, random_seed):
+    """按固定 seed 对单个 block 下采样，避免 biolord per-observation latent 爆显存。"""
+    if max_cells is None or adata.n_obs <= max_cells:
+        return adata
+
+    rng = np.random.default_rng(random_seed)
+    sampled_idx = np.sort(rng.choice(adata.n_obs, size=max_cells, replace=False))
+    return adata[sampled_idx].copy()
+
+
 def adata_to_numpy(x):
     """把 sparse/dense 表达矩阵统一转成 float32 dense array。"""
     if sp.issparse(x):
@@ -354,6 +378,14 @@ def build_target_cell_adata(target_cell_type, drug_name_list, control_drug_index
                 drug_index=drug_index,
                 expected_drug_name=drug_name,
             )
+            max_cells = MAX_CELLS_PER_BLOCK
+            if cell_type == target_cell_type and drug_index == control_drug_index:
+                max_cells = MAX_TARGET_CONTROL_CELLS
+            block = downsample_block(
+                adata=block,
+                max_cells=max_cells,
+                random_seed=stable_block_seed(cell_type, drug_index),
+            )
             all_blocks.append(block)
 
             if block_count % 200 == 0:
@@ -408,6 +440,8 @@ def build_target_cell_adata(target_cell_type, drug_name_list, control_drug_index
 
     print("当前 target 任务 AnnData 构建完成")
     print(f"adata shape: {adata.shape}")
+    print(f"max cells per block: {MAX_CELLS_PER_BLOCK}")
+    print(f"max target control cells: {MAX_TARGET_CONTROL_CELLS}")
     print(f"train cells: {(adata.obs['split'] == 'train').sum()}")
     print(f"valid cells: {(adata.obs['split'] == 'valid').sum()}")
     print(f"ood cells  : {(adata.obs['split'] == 'ood').sum()}")
@@ -757,6 +791,9 @@ if __name__ == "__main__":
     print(f"RUN_FINAL_MERGE: {RUN_FINAL_MERGE}")
     print(f"max_epochs: {MAX_EPOCHS}")
     print(f"batch_size: {BATCH_SIZE}")
+    print(f"predict cell batch size: {PREDICT_CELL_BATCH_SIZE}")
+    print(f"max cells per block: {MAX_CELLS_PER_BLOCK}")
+    print(f"max target control cells: {MAX_TARGET_CONTROL_CELLS}")
     print(f"early_stopping_patience: {EARLY_STOPPING_PATIENCE}")
     print(f"prediction zero threshold: < {PREDICTION_ZERO_THRESHOLD:g} -> 0")
     print(f"输出目录: {OUTPUT_DIR}")
