@@ -6,7 +6,7 @@ set -euo pipefail
 #   CUDA_DEVICE_LIST=0,1,2,3 bash run_scvidr_tahoe_10_targets.sh
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-LOG_DIR="${SCVIDR_TAHOE_LOG_DIR:-${SCRIPT_DIR}/../logs/scvidr_tahoe}"
+LOG_DIR="${SCVIDR_TAHOE_LOG_DIR:-${SCRIPT_DIR}/logs/scvidr_tahoe}"
 PYTHON_BIN="${PYTHON_BIN:-python}"
 GPU_LIST="${CUDA_DEVICE_LIST:-0}"
 
