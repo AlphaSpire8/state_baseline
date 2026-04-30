@@ -19,6 +19,7 @@ Tahoe scVIDR baseline aligned with scPerturBench OOD scVIDR.
 """
 
 from pathlib import Path
+import argparse
 import ctypes
 import gc
 import hashlib
@@ -121,6 +122,85 @@ TRAIN_CELL_TYPES = (
 )
 
 TARGET_CELL_TYPES = ["c4", "c17", "c18", "c23", "c38", "c19", "c20", "c22", "c24", "c31"]
+
+
+# =========================
+# 命令行参数
+# =========================
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Run Tahoe scVIDR OOD prediction for selected target cell types."
+    )
+    parser.add_argument(
+        "--target-index",
+        type=int,
+        default=None,
+        help="只跑一个 target cell_type 下标；设置后会覆盖 START/END_TARGET_INDEX。",
+    )
+    parser.add_argument(
+        "--start-target-index",
+        type=int,
+        default=None,
+        help="本轮起始 target cell_type 下标。",
+    )
+    parser.add_argument(
+        "--end-target-index",
+        type=int,
+        default=None,
+        help="本轮结束 target cell_type 下标，闭区间。",
+    )
+    parser.add_argument(
+        "--start-drug-index",
+        type=int,
+        default=None,
+        help="本轮起始 drug_index。",
+    )
+    parser.add_argument(
+        "--end-drug-index",
+        type=int,
+        default=None,
+        help="本轮结束 drug_index，闭区间。",
+    )
+    parser.add_argument(
+        "--merge-only",
+        action="store_true",
+        help="只合并已有 tmp_predictions，不执行训练。",
+    )
+    parser.add_argument(
+        "--no-final-merge",
+        action="store_true",
+        help="只生成 tmp_predictions，不在本轮结束时合并最终 h5ad。",
+    )
+    return parser.parse_args()
+
+
+def apply_cli_overrides(args):
+    global START_TARGET_INDEX
+    global END_TARGET_INDEX
+    global START_DRUG_INDEX
+    global END_DRUG_INDEX
+    global RUN_TRAINING
+    global RUN_FINAL_MERGE
+
+    if args.target_index is not None:
+        START_TARGET_INDEX = args.target_index
+        END_TARGET_INDEX = args.target_index
+    else:
+        if args.start_target_index is not None:
+            START_TARGET_INDEX = args.start_target_index
+        if args.end_target_index is not None:
+            END_TARGET_INDEX = args.end_target_index
+
+    if args.start_drug_index is not None:
+        START_DRUG_INDEX = args.start_drug_index
+    if args.end_drug_index is not None:
+        END_DRUG_INDEX = args.end_drug_index
+
+    if args.merge_only:
+        RUN_TRAINING = False
+        RUN_FINAL_MERGE = True
+    if args.no_final_merge:
+        RUN_FINAL_MERGE = False
 
 
 # =========================
@@ -642,6 +722,9 @@ def merge_one_target(target_cell_type, drug_name_list, control_drug_index):
 # 主流程
 # =========================
 if __name__ == "__main__":
+    args = parse_args()
+    apply_cli_overrides(args)
+
     np.random.seed(RANDOM_SEED)
     torch.manual_seed(RANDOM_SEED)
     if torch.cuda.is_available():
