@@ -483,6 +483,28 @@ def repeat_attribute_value(value, n_obs):
     return value.unsqueeze(0).repeat(*repeat_shape)
 
 
+def prediction_tensor_to_2d_numpy(pred, expected_n_obs, expected_n_vars):
+    """biolord 在 batch size 为 1 时可能返回 1D，统一恢复成二维矩阵。"""
+    pred_np = pred.detach().cpu().numpy().astype(np.float32)
+    if pred_np.ndim == 1:
+        if expected_n_obs != 1:
+            raise RuntimeError(
+                "biolord 返回了 1D prediction，但当前 chunk 不止 1 个细胞: "
+                f"expected_n_obs={expected_n_obs}, pred_shape={pred_np.shape}"
+            )
+        pred_np = pred_np.reshape(1, -1)
+    elif pred_np.ndim != 2:
+        raise RuntimeError(f"biolord prediction 维度异常: pred_shape={pred_np.shape}")
+
+    expected_shape = (expected_n_obs, expected_n_vars)
+    if pred_np.shape != expected_shape:
+        raise RuntimeError(
+            "biolord prediction shape 与 source chunk 不一致: "
+            f"pred_shape={pred_np.shape}, expected_shape={expected_shape}"
+        )
+    return pred_np
+
+
 @torch.no_grad()
 def predict_one_drug_low_memory(model, adata_task, adata_source, drug_name):
     """
@@ -521,7 +543,13 @@ def predict_one_drug_low_memory(model, adata_task, adata_source, drug_name):
 
                 model.module.eval()
                 pred, _ = model.module.get_expression(dataset_comb)
-                pred_blocks.append(pred.detach().cpu().numpy().astype(np.float32))
+                pred_blocks.append(
+                    prediction_tensor_to_2d_numpy(
+                        pred=pred,
+                        expected_n_obs=n_obs,
+                        expected_n_vars=adata_source.n_vars,
+                    )
+                )
 
             finally:
                 clear_biolord_temp_manager(model, adata_source_chunk)
